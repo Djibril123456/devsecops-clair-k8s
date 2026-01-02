@@ -36,18 +36,49 @@ jobs:
           docker push "${IMAGE_NAME}"
 
       
-      - name: Clair scan (SARIF)
-        uses: quay/clair-action@3
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}
-          format: sarif
-          output: clair_results.sarif
-          return-code: "1"
+            - name: Clair scan (JSON report)
+        run: |
+          # Dossier de sortie
+          mkdir -p reports
 
-      - name: Upload SARIF to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+          # Lance un Clair local (dans Docker) + DB interne
+          docker network create clairnet || true
+
+          docker run -d --rm --name clair-postgres --network clairnet \
+            -e POSTGRES_PASSWORD=clair -e POSTGRES_USER=clair -e POSTGRES_DB=clair \
+            postgres:16
+
+          docker run -d --rm --name clair --network clairnet -p 6060:6060 -p 6061:6061 \
+            quay.io/projectquay/clair:latest
+
+          # Attendre que Clair réponde
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:6060/healthz && break || true
+            sleep 2
+          done
+
+          # Télécharger clairctl
+          curl -L -o clairctl https://github.com/quay/clair/releases/latest/download/clairctl-linux-amd64
+          chmod +x clairctl
+
+          # Scanner l’image
+          ./clairctl --config <(cat <<'EOF'
+          clair:
+            host: http://localhost:6060
+          EOF
+          ) report "${IMAGE_NAME}" > reports/clair-report.json
+
+          # Nettoyage
+          docker stop clair || true
+          docker stop clair-postgres || true
+          docker network rm clairnet || true
+
+      - name: Upload Clair report artifact
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: clair_results.sarif
+          name: clair-report
+          path: reports/clair-report.json
+
 
       - name: Deploy to Kubernetes (kind)
         run: |
