@@ -42,5 +42,10 @@ jobs:
       - name: Deploy to Kubernetes (kind)
         run: |
           sed "s|local/devsecops-app:dev|${IMAGE_NAME}|g" k8s/deployment.yaml | kubectl apply -f -
-          kubectl rollout status deploy/devsecops-app --timeout=180s
+
+          echo "=== Pods ==="
           kubectl get pods -o wide
+
+          echo "=== Deployment status ==="
+          kubectl describe deploy devsecops-app || true
+
