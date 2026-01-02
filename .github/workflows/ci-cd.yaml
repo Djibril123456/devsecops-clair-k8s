@@ -37,7 +37,7 @@ jobs:
 
       
       - name: Clair scan (SARIF)
-        uses: quay/clair-action@main
+        uses: quay/clair-action@3
         with:
           image-ref: ${{ env.IMAGE_NAME }}
           format: sarif
