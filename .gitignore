@@ -1,0 +1,6 @@
+
+# Self-hosted runner (NE PAS VERSIONNER)
+k8s/actions-runner/
+actions-runner/
+**/_work/
+**/externals/
