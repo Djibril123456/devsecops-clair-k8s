@@ -38,6 +38,40 @@ jobs:
       - name: Push image
         run: |
           docker push "${IMAGE_NAME}"
+      - name: Start Clair (docker compose)
+        run: |
+          docker compose -f security/clair/docker-compose.yaml up -d
+          # Attendre que Clair réponde (max ~60s)
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:6060/healthz && exit 0 || true
+            sleep 2
+          done
+          echo "Clair did not become healthy in time"
+          docker compose -f security/clair/docker-compose.yaml logs --no-color || true
+          exit 1
+
+      - name: Clair scan (generate report)
+        run: |
+          mkdir -p reports
+          curl -L -o clairctl https://github.com/quay/clair/releases/latest/download/clairctl-linux-amd64
+          chmod +x clairctl
+
+          ./clairctl --config <(cat <<'EOF'
+          clair:
+            host: http://localhost:6060
+          EOF
+          ) report "${IMAGE_NAME}" > reports/clair-report.json
+
+      - name: Upload Clair report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clair-report
+          path: reports/clair-report.json
+
+      - name: Stop Clair
+        if: always()
+        run: |
+          docker compose -f security/clair/docker-compose.yaml down --remove-orphans
 
       - name: Deploy to Kubernetes (kind)
         run: |

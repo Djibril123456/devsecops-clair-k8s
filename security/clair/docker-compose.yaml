@@ -1,0 +1,24 @@
+services:
+  clair-postgres:
+    image: postgres:16
+    container_name: clair-postgres
+    environment:
+      POSTGRES_PASSWORD: clair
+      POSTGRES_USER: clair
+      POSTGRES_DB: clair
+    networks: [clairnet]
+
+  clair:
+    image: quay.io/projectquay/clair:latest
+    container_name: clair
+    depends_on: [clair-postgres]
+    command: ["-conf", "/config/config.yaml"]
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+    ports:
+      - "6060:6060"
+      - "6061:6061"
+    networks: [clairnet]
+
+networks:
+  clairnet: {}
