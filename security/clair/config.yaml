@@ -2,13 +2,15 @@ http_listen_addr: ":6060"
 introspection_addr: ":6061"
 log_level: "info"
 
+# Clair v4: active les composants
+mode: combo
+
 indexer:
   connstring: "postgresql://clair:clair@clair-postgres:5432/clair?sslmode=disable"
-  scanlock_retry: 10
-  layer_scan_concurrency: 5
 
 matcher:
   connstring: "postgresql://clair:clair@clair-postgres:5432/clair?sslmode=disable"
 
 notifier:
   connstring: "postgresql://clair:clair@clair-postgres:5432/clair?sslmode=disable"
+

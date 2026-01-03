@@ -41,13 +41,35 @@ jobs:
       - name: Start Clair (docker compose)
         run: |
           docker compose -f security/clair/docker-compose.yaml up -d
-          # Attendre que Clair réponde (max ~60s)
+
+          echo "=== Containers ==="
+          docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+          # Attendre que le container 'clair' soit UP (running)
           for i in $(seq 1 30); do
-            curl -fsS http://localhost:6060/healthz && exit 0 || true
+            if docker ps --format '{{.Names}}' | grep -q '^clair$'; then
+              echo "Clair container is running"
+              break
+            fi
+            echo "Waiting for Clair container..."
             sleep 2
           done
-          echo "Clair did not become healthy in time"
-          docker compose -f security/clair/docker-compose.yaml logs --no-color || true
+
+          # Attendre que le port 6060 réponde (healthz peut varier, on teste juste le port)
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:6060/ >/dev/null 2>&1; then
+              echo "Clair HTTP endpoint responds"
+              exit 0
+            fi
+            echo "Waiting for Clair HTTP on 6060..."
+            sleep 2
+          done
+
+          echo "Clair did not become reachable in time"
+          echo "=== Clair logs ==="
+          docker compose -f security/clair/docker-compose.yaml logs --no-color clair || true
+          echo "=== Postgres logs ==="
+          docker compose -f security/clair/docker-compose.yaml logs --no-color clair-postgres || true
           exit 1
 
       - name: Clair scan (generate report)
