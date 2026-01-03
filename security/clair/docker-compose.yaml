@@ -9,7 +9,7 @@ services:
     networks: [clairnet]
 
   clair:
-    image: quay.io/projectquay/clair:v4
+    image: quay.io/projectquay/clair:4.7.4
     container_name: clair
     depends_on: [clair-postgres]
     command: ["-conf", "/config/config.yaml"]
