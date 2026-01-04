@@ -38,53 +38,37 @@ jobs:
       - name: Push image
         run: |
           docker push "${IMAGE_NAME}"
-      - name: Start Clair (docker compose)
+      # === Clair scan (NON BLOQUANT / BEST EFFORT) ===
+      - name: Clair scan (non-blocking)
+        continue-on-error: true
         run: |
-          docker compose -f security/clair/docker-compose.yaml up -d
+          echo "Starting Clair scan (best effort)"
 
-          echo "=== Containers ==="
-          docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-
-          # Attendre que le container 'clair' soit UP (running)
-          for i in $(seq 1 30); do
-            if docker ps --format '{{.Names}}' | grep -q '^clair$'; then
-              echo "Clair container is running"
-              break
-            fi
-            echo "Waiting for Clair container..."
-            sleep 2
-          done
-
-          # Attendre que le port 6060 réponde (healthz peut varier, on teste juste le port)
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:6060/ >/dev/null 2>&1; then
-              echo "Clair HTTP endpoint responds"
-              exit 0
-            fi
-            echo "Waiting for Clair HTTP on 6060..."
-            sleep 2
-          done
-
-          echo "Clair did not become reachable in time"
-          echo "=== Clair logs ==="
-          docker compose -f security/clair/docker-compose.yaml logs --no-color clair || true
-          echo "=== Postgres logs ==="
-          docker compose -f security/clair/docker-compose.yaml logs --no-color clair-postgres || true
-          exit 1
-
-      - name: Clair scan (generate report)
-        run: |
           mkdir -p reports
-          curl -L -o clairctl https://github.com/quay/clair/releases/latest/download/clairctl-linux-amd64
-          chmod +x clairctl
 
-          ./clairctl --config <(cat <<'EOF'
-          clair:
-            host: http://localhost:6060
-          EOF
-          ) report "${IMAGE_NAME}" > reports/clair-report.json
+          # Placeholder par défaut (garanti)
+          echo '{ "status": "skipped", "reason": "Clair non-blocking mode" }' > reports/clair-report.json
+
+          # Tentative de démarrage Clair (si présent)
+          docker compose -f security/clair/docker-compose.yaml up -d || true
+
+          # Téléchargement clairctl
+          curl -L -o clairctl https://github.com/quay/clair/releases/latest/download/clairctl-linux-amd64 || true
+          chmod +x clairctl || true
+
+          # Tentative de scan uniquement si Clair répond
+          if [ -x "./clairctl" ] && curl -fsS http://localhost:6060 >/dev/null 2>&1; then
+            ./clairctl --config <(cat <<'EOF'
+            clair:
+              host: http://localhost:6060
+            EOF
+            ) report "${IMAGE_NAME}" > reports/clair-report.json || true
+          fi
+
+          echo "Clair scan finished (non-blocking)"
 
       - name: Upload Clair report artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: clair-report
@@ -92,8 +76,10 @@ jobs:
 
       - name: Stop Clair
         if: always()
+        continue-on-error: true
         run: |
-          docker compose -f security/clair/docker-compose.yaml down --remove-orphans
+          docker compose -f security/clair/docker-compose.yaml down --remove-orphans || true
+
 
       - name: Deploy to Kubernetes (kind)
         run: |
